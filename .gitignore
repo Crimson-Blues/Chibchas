@@ -127,3 +127,22 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Visual Studio folders
+.vs/
+*.slnx
+*.suo
+
+# Python junk
+__pycache__/
+*.pyc
+.venv/
+env/
+
+# Windows junk
+Thumbs.db
+Desktop.ini
+
+# Scraped data (optional, but usually good to keep clean)
+*.xlsx
+*.csv

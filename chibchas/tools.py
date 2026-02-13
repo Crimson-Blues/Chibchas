@@ -7,6 +7,7 @@ import getpass
 import os
 import sys
 import re
+from io import StringIO
 from cryptography.fernet import Fernet
 from os.path import isfile
 
@@ -150,7 +151,7 @@ def rename_col(df,colr,colf):
 def format_df(df, sheet_name, start_row, writer,eh, veh = None):
     'format headers'
     
-    df.to_excel(writer, sheet_name, startrow = start_row+1, startcol = 2, index = False)
+    df.to_excel(writer, sheet_name=sheet_name, startrow=start_row+1, startcol=2, index=False)
 
     # Get the xlsxwriter workbook and worksheet objects.
     worksheet = writer.sheets[sheet_name]
@@ -348,7 +349,7 @@ def format_info(df, writer, sheet_name):
     start_row = 6
     start_col = 3
     
-    df.to_excel(writer, sheet_name, startrow =start_row, startcol=start_col,index = False)
+    df.to_excel(writer, sheet_name=sheet_name, startrow =start_row, startcol=start_col,index = False)
 
     # get worksheet object
     worksheet = writer.sheets[sheet_name]
@@ -360,7 +361,7 @@ def format_info(df, writer, sheet_name):
     worksheet.set_column('A:A', 15)
     worksheet.set_column('B:B', 15)
 
-    logo_path = str(pathlib.Path("__file__").parent.absolute()) + '/templates/img/logo.jpeg'
+    logo_path = str(pathlib.Path("__file__").parent.absolute()) + '/chibchas/templates/img/logo.jpeg'
     worksheet.insert_image('A1', logo_path)
     
     # title 1 UNIVERSIDAD DE ANTIOQUIA
@@ -543,7 +544,7 @@ def login(user,password,institution='UNIVERSIDAD DE ANTIOQUIA',sleep=0.8,headles
     # passw=
 
     # login
-    browser = h.start_firefox('https://scienti.minciencias.gov.co/institulac2-war/',headless=headless)
+    browser = h.start_chrome('https://scienti.minciencias.gov.co/institulac2-war/',headless=headless)
 
     #browser = h.start_firefox('https://scienti.minciencias.gov.co/institulac2-war/')
     time.sleep(sleep)
@@ -603,10 +604,12 @@ def login(user,password,institution='UNIVERSIDAD DE ANTIOQUIA',sleep=0.8,headles
 
     # navigation 1
     time.sleep(sleep)
-    h.click('Aval')
+    # h.click('Aval')
 
-    time.sleep(sleep)
-    h.click('Avalar grupos')
+    # time.sleep(sleep)
+    # h.click('Avalar grupos')
+
+    h.go_to('https://scienti.minciencias.gov.co/institulac2-war/ReGrupoInstitucion/all.do?popUp=pop&session=E5.0H3.0W4.0Y6.0D8.0U2.0S4.0E5.0H7.0H3.0Z5.0S4.0H1.0H7.0D4.0W2.0')
 
     time.sleep(sleep)
     h.click('Grupos Avalados')
@@ -651,7 +654,7 @@ def get_groups(browser,DIR='InstituLAC',sleep=0.8):
 
             # catch table
             time.sleep(sleep)
-            df=pd.read_html(source_g, attrs={"id":"grupos_avalados"}, header=2)[0]
+            df=pd.read_html(StringIO(source_g), attrs={"id":"grupos_avalados"}, header=2)[0]
 
             # and preprocces it
             c=[x for x in df.columns if x.find('Unnamed:') == -1]
@@ -661,7 +664,8 @@ def get_groups(browser,DIR='InstituLAC',sleep=0.8):
             # catch urls
             url=[a.get_attribute('href') for a in browser.find_elements(By.XPATH, '//table[@id="grupos_avalados"]//td[5]/a')]
             dfgp['Revisar'] = url
-            dfg=dfg._append(dfgp)
+            dfg = pd.concat([dfg, dfgp], ignore_index=True)
+           #dfg=dfg._append(dfgp)
 
             # click next page. this instruction rise error of the end. 
             h.click(browser.find_element(By.XPATH, '//table[@id="grupos_avalados"]//tr/td[3]/a'))
@@ -719,13 +723,13 @@ def get_DB(browser, target_data, DB=[], dfg = pd.DataFrame(), sleep=0.8, DIR='In
         source=browser.page_source
 
         # Info group
-        l_info=pd.read_html(source, match='Nombre Grupo')
+        l_info=pd.read_html(StringIO(source), match='Nombre Grupo')
         info_g=l_info[3].pivot(columns=0,values=1)
 
         # Store info group
         DBG['Info_group'] = info_g
         # List members
-        l_int = pd.read_html(source,attrs={'id':'tblIntegrantes'},header=2)
+        l_int = pd.read_html(StringIO(source),attrs={'id':'tblIntegrantes'},header=2)
         mem_g=l_int[0]
 
         # Store list of members
@@ -783,7 +787,12 @@ def get_DB(browser, target_data, DB=[], dfg = pd.DataFrame(), sleep=0.8, DIR='In
                     id_prod = prod.get_attribute('id')
                     #print('           ',prod.text,id_prod)
                     #print(prod)
-                    num_items_prod = int(re.findall(r'\d+',prod.text)[0])
+                    num_items_search = re.findall(r'\d+',prod.text)
+                    if num_items_search:
+                        num_items_prod = int(num_items_search[0])
+                    else:
+                        num_items_prod = 0
+
                     if num_items_prod > 0:
                         lcp.append([id_cat,id_prod])
                         print('           ',prod.text,id_prod)
@@ -815,7 +824,7 @@ def get_DB(browser, target_data, DB=[], dfg = pd.DataFrame(), sleep=0.8, DIR='In
             page_source = browser.page_source
             # detect tables
             try:
-                tables = pd.read_html(browser.page_source,attrs={'class':'table'})
+                tables = pd.read_html(StringIO(browser.page_source),attrs={'class':'table'})
             # clean tables
             except (ValueError, ImportError) as e:
                 tables = [None]
@@ -1801,6 +1810,7 @@ def checkpoint(DIR='InstituLAC',start=None,CHECKPOINT=True):
              DB[oldend]['Info_group']['Nombre Grupo'].dropna().iloc[-1]
             and CHECKPOINT):
             start=oldend+1 # Reset start
+            print(f"New start: {start}")
             return DB,dfg,start,CHECKPOINT
     except:
         CHECKPOINT=False
@@ -1832,7 +1842,7 @@ def to_json(DB,dfg,DIR='InstituLAC'):
                 #print( f'{k}-{kk}{nk}' ) 
                 df=DB[i][k][kk]
                 if df is not None and not df.empty:
-                    nk=re.sub('[A-Z\_]','',kk)
+                    nk=re.sub('[A-Z\\_]','',kk)
                     cs=[c for c in df.columns if c.find('Unnamed:')==-1 and c!='Revisar']
                     db[f'{k}-{kk}{nk}']=df[cs].fillna('').to_dict('records')
         DBJ.append(db)
@@ -1842,38 +1852,45 @@ def to_json(DB,dfg,DIR='InstituLAC'):
         
     return DBJ
 
-def main(user, password,target_data='Pert', institution='UNIVERSIDAD DE ANTIOQUIA', DIR='InstituLAC', 
+def main(user, password,target_data='Pert', institution='UNIVERSIDAD DEL VALLE', DIR='InstituLAC', 
          CHECKPOINT=True,headless=True, start=None, end=None, COL_Group='',
          start_time=0):
-    '''
-    '''
-    browser = login(user, password, institution=institution, headless=headless)
+
+    while True:
+        try:
+            browser = login(user, password, institution=institution, headless=headless)
     
-    LOGIN=True
-    if not browser:
-        LOGIN=False
-        return LOGIN
+            LOGIN=True
+            if not browser:
+                LOGIN=False
+                return LOGIN
         
-    time.sleep(2)
+            time.sleep(2)
 
-    DB, dfg, start, CHECKPOINT = checkpoint(DIR=DIR, start=start, CHECKPOINT=CHECKPOINT)
-    print('*' * 80)
-    if CHECKPOINT:
-        print(f'start → {len(DB)}')
-    else:
-        print(f'start → {start}')
-    print('*' * 80)
+            DB, dfg, start, CHECKPOINT = checkpoint(DIR=DIR, start=start, CHECKPOINT=CHECKPOINT)
+            print('*' * 80)
+            if CHECKPOINT:
+                print(f'start → {len(DB)}')
+            else:
+                print(f'start → {start}')
+            print('*' * 80)
     
-    if end and start and end < start:
-        sys.exit('ERROR! end<=start')
+            if (end and start) and (end < start):
+                sys.exit('ERROR! end<=start')
 
-    DB, dfg = get_DB(browser,target_data, DB=DB, dfg=dfg, DIR=DIR,
-                     start=start, end=end, COL_Group=COL_Group, start_time=start_time)
+            DB, dfg = get_DB(browser,target_data, DB=DB, dfg=dfg, DIR=DIR,
+                                start=start, end=end, COL_Group=COL_Group, start_time=start_time)
 
-    DB, nones = dummy_fix_df(DB)
-    if nones:
-        print('WARNING:Nones IN DB')
-    to_excel(DB, dfg, DIR=DIR)
-    DBJ=to_json(DB, dfg, DIR=DIR)
-    
-    return LOGIN  
+            DB, nones = dummy_fix_df(DB)
+            if nones:
+                print('WARNING:Nones IN DB')
+            to_excel(DB, dfg, DIR=DIR)
+            DBJ=to_json(DB, dfg, DIR=DIR)
+
+            browser.quit()
+
+            return LOGIN
+        except Exception as e:
+            print('ERROR GENERAL:',e)
+            print('Reintentando en 1 segundo...')
+            time.sleep(1)
