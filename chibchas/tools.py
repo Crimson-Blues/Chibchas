@@ -19,6 +19,12 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 import pathlib
 from selenium.webdriver.firefox.options import Options
+from IPython.display import display
+
+from openpyxl import load_workbook
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.styles import Font
 
 pd.options.display.max_rows = 100
 pd.options.display.max_colwidth = 1000
@@ -754,7 +760,7 @@ def get_DB(browser, target_data, DB=[], dfg = pd.DataFrame(), sleep=0.8, DIR='In
         elif target_data == 'Pert':
             target_data = _target_data[2:]
             print('map Pert institulac prods')
-        elif target_data == 'All':
+        else:
             target_data = _target_data
             print('map all institulac prods')
         
@@ -1852,10 +1858,10 @@ def to_json(DB,dfg,DIR='InstituLAC'):
         
     return DBJ
 
-def main(user, password,target_data='Pert', institution='UNIVERSIDAD DEL VALLE', DIR='InstituLAC', 
+def main(user, password,target_data='All', institution='UNIVERSIDAD DEL VALLE', DIR='InstituLAC', 
          CHECKPOINT=True,headless=True, start=None, end=None, COL_Group='',
          start_time=0):
-
+    browser = None # Initializtion of browser variable
     while True:
         try:
             browser = login(user, password, institution=institution, headless=headless)
@@ -1866,6 +1872,7 @@ def main(user, password,target_data='Pert', institution='UNIVERSIDAD DEL VALLE',
                 return LOGIN
         
             time.sleep(2)
+
 
             DB, dfg, start, CHECKPOINT = checkpoint(DIR=DIR, start=start, CHECKPOINT=CHECKPOINT)
             print('*' * 80)
@@ -1884,13 +1891,158 @@ def main(user, password,target_data='Pert', institution='UNIVERSIDAD DEL VALLE',
             DB, nones = dummy_fix_df(DB)
             if nones:
                 print('WARNING:Nones IN DB')
-            to_excel(DB, dfg, DIR=DIR)
+
+
+            total_DB = []
+
+            #print(dfg)
+
+            #print(dfg.columns)
+
+            # for group in DB:
+            #     print(type(group))
+            #     for cat in group.keys():
+            #         print(f"Category: {cat}")
+            #         if cat in ['Info_group','Members']:
+            #             print(f" Value: {display(group[cat])}")
+            #         if group[cat] is not None and type(group[cat]) is dict:
+            #             for subcat in group[cat].keys():
+            #                 print(f"  Subcategory: {subcat}")
+            #                 print(f" Value: {group[cat][subcat]}")
+
+
+                    
+            
+
+            #to_excel(DB, dfg, DIR=DIR)
             DBJ=to_json(DB, dfg, DIR=DIR)
+
+            groups_to_excel(DB, dfg, DIR=DIR)
+            products_to_excel(DB, dfg, DIR=DIR)
 
             browser.quit()
 
             return LOGIN
+
         except Exception as e:
-            print('ERROR GENERAL:',e)
+            print('Error en Main:',e)
             print('Reintentando en 1 segundo...')
+            browser.quit()
             time.sleep(1)
+
+        finally:
+            if browser:
+                try:
+                    browser.quit()
+                except:
+                    pass # In case it has quit already
+
+
+def groups_to_excel(DB, dfg, DIR='InstituLAC'):
+    # Creates a single output Excel with sheets for each group
+    try:
+        # Create a new workbook and sheet
+        wb = Workbook()
+        del wb['Sheet']  # Remove the default sheet
+        for idx, group in enumerate(DB):
+            print(f"Processing group {dfg.iloc[idx]['Nombre del grupo']} with index {idx}")
+            code = dfg.iloc[idx]['COL Grupo']
+            ws = wb.create_sheet(title=code)
+            
+
+            # Start at the first row
+            row_index = 1
+
+            ws.cell(row=row_index, column=1, value='Información Grupo').font = Font(bold=True)
+
+            ws.cell(row=row_index + 1, column=1, value= 'Nombre:')
+            ws.cell(row=row_index + 1, column=2, value= dfg.iloc[idx]['Nombre del grupo'])
+
+            ws.cell(row=row_index + 2, column=1, value= 'Código:')
+            ws.cell(row=row_index + 2, column=2, value= dfg.iloc[idx]['COL Grupo'])
+
+            ws.cell(row=row_index + 3, column=1, value= 'Nombre de Líder:')
+            ws.cell(row=row_index + 3, column=2, value= dfg.iloc[idx]['Nombre del líder'])
+
+            row_index += 5 # Blank rows after group info
+
+            for cat in group.keys():
+                #Group info and Members
+                if cat == 'Members':
+                    ws.cell(row=row_index, column=1, value=cat).font = Font(bold=True)
+                    row_index += 2
+                    for row in dataframe_to_rows(group[cat], header=True, index=False):
+                        for col_idx, value in enumerate(row, start=1):
+                            ws.cell(row=row_index, column=col_idx, value=value)
+                        row_index += 1
+
+                    row_index +=1 #Blank row after each table
+
+                # Products DFs
+                if group[cat] is not None and type(group[cat]) is dict:
+                    for subcat in group[cat].keys():
+                        ws.cell(row=row_index, column=1, value=cat + ": " + subcat).font = Font(bold=True)
+                        row_index += 2
+                        df_excel = group[cat][subcat].reset_index(drop=False, names='No.')
+                        for row in dataframe_to_rows(df_excel, index=False, header=True):
+                            for col_idx, value in enumerate(row, start=1):
+                                ws.cell(row=row_index, column=col_idx, value=value)
+                            row_index += 1
+
+                        row_index +=1
+
+        # Save the workbook
+        wb.save("InstituLAC/Results.xlsx")
+
+    except Exception as e:
+        print(f'Error processing group {dfg.iloc[idx]['Nombre del grupo']} with index {idx}: {e}')
+
+
+def products_to_excel(DB, dfg, DIR='InstituLAC'):
+    try:
+        prods = {}
+        for idx, DBG in enumerate(DB):
+            group_name = dfg.iloc[idx]['Nombre del grupo']
+            group_code = dfg.iloc[idx]['COL Grupo']
+            group_leader = dfg.iloc[idx]['Nombre del líder']
+
+            for cat_name, cat_dict in DBG.items():
+                if cat_name in ['Info_Group', 'Members'] or type(cat_dict) is not dict:
+                    continue
+
+                for subcat_name, prods_df in cat_dict.items():
+                    if subcat_name not in prods:
+                        prods[subcat_name] = []
+
+                    prods_df['Código Grupo'] = group_code
+                    prods_df['Nombre Grupo'] = group_name
+                    prods_df['Nombre de Líder'] = group_leader
+
+                    prods[subcat_name].append(prods_df)
+
+        print(f"Size of prods: {len(prods)}")
+        dfs_to_excel = {}
+        for prod_name in prods:
+            # Concatenates the DataFrames of every group
+            dfs_to_excel[prod_name]= pd.concat(prods[prod_name], ignore_index=True)
+
+        with pd.ExcelWriter('InstituLAC/Listado de Productos.xlsx') as writer:
+            for name, df in dfs_to_excel.items():
+                clean_name = clean_sheet_name(name)
+                df.to_excel(writer, sheet_name=clean_name)
+
+                
+    except Exception as e:
+        print(f'Error Processing products: {e}')
+
+
+def clean_sheet_name(name):
+    if not name:
+        name = "Working Sheet" # In case of empty sheet name
+
+    name = name[:31] # Limits characters 
+    name = re.sub(r'[/?*<>:\\|\[\]]', '', name) # Eliminates special characters
+
+    return name
+
+

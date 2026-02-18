@@ -5,7 +5,7 @@ def test_py():
     print("Testing Chibchas...")
     user = "VICEFEP"
     password = "EDUCACION2021"
-    tools.main(user, password, headless=False, end=2)
+    tools.main(user, password, headless=False, end=37, target_data='All')
     print("All tests passed!")
 
 
