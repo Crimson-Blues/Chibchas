@@ -2029,6 +2029,7 @@ def products_to_excel(DB, dfg, DIR='InstituLAC'):
         with pd.ExcelWriter('InstituLAC/Listado de Productos.xlsx') as writer:
             for name, df in dfs_to_excel.items():
                 clean_name = clean_sheet_name(name)
+                df.reset_index(drop=False, names='No.')
                 df.to_excel(writer, sheet_name=clean_name)
 
                 
