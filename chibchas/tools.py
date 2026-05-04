@@ -1864,12 +1864,12 @@ def main(user, password,target_data='All', institution='UNIVERSIDAD DEL VALLE', 
     browser = None # Initializtion of browser variable
     while True:
         try:
-            browser = login(user, password, institution=institution, headless=headless)
+            #browser = login(user, password, institution=institution, headless=headless)
     
             LOGIN=True
-            if not browser:
-                LOGIN=False
-                return LOGIN
+            # if not browser:
+            #     LOGIN=False
+            #     return LOGIN
         
             time.sleep(2)
 
@@ -1885,8 +1885,8 @@ def main(user, password,target_data='All', institution='UNIVERSIDAD DEL VALLE', 
             if (end and start) and (end < start):
                 sys.exit('ERROR! end<=start')
 
-            DB, dfg = get_DB(browser,target_data, DB=DB, dfg=dfg, DIR=DIR,
-                                start=start, end=end, COL_Group=COL_Group, start_time=start_time)
+            # DB, dfg = get_DB(browser,target_data, DB=DB, dfg=dfg, DIR=DIR,
+            #                     start=start, end=end, COL_Group=COL_Group, start_time=start_time)
 
             DB, nones = dummy_fix_df(DB)
             if nones:
@@ -1917,10 +1917,11 @@ def main(user, password,target_data='All', institution='UNIVERSIDAD DEL VALLE', 
             #to_excel(DB, dfg, DIR=DIR)
             DBJ=to_json(DB, dfg, DIR=DIR)
 
-            groups_to_excel(DB, dfg, DIR=DIR)
-            products_to_excel(DB, dfg, DIR=DIR)
+            #groups_to_excel(DB, dfg, DIR=DIR)
+            #products_to_excel(DB, dfg, DIR=DIR)
+            total_products_to_excel(DB, dfg, DIR=DIR)
 
-            browser.quit()
+            #browser.quit()
 
             return LOGIN
 
@@ -2007,7 +2008,7 @@ def products_to_excel(DB, dfg, DIR='InstituLAC'):
             group_leader = dfg.iloc[idx]['Nombre del líder']
 
             for cat_name, cat_dict in DBG.items():
-                if cat_name in ['Info_Group', 'Members'] or type(cat_dict) is not dict:
+                if cat_name in ['Info_Group', 'Members'] or not isinstance(cat_dict, dict):
                     continue
 
                 for subcat_name, prods_df in cat_dict.items():
@@ -2036,6 +2037,89 @@ def products_to_excel(DB, dfg, DIR='InstituLAC'):
     except Exception as e:
         print(f'Error Processing products: {e}')
 
+
+def year_only(text):
+    # Handle Nan's
+    if not isinstance(text, str):
+        return -1
+    
+    pattern = r'\s*((19|20)\d{2})'
+    match = re.search(pattern, text)
+    
+    if match:
+        return int(match.group(1))
+    
+    return -1
+
+def unify_columns(df):
+    schema = {
+        "Nombre Producto" : ['Título', 'Nombre', 'Documento'],
+        "Año Inicio" : ['Año', 'Presentación', 'Inicio', 'Fecha inicio', 'Fecha realización'],
+        "Año Fin" : ['Finalización', 'Fecha fin'],
+        "Categoría" : ["Categoría"],
+        "Última Actualización" : ["Última actualización"]
+        }
+
+    used_cols = set()
+    for col_name, keywords in schema.items():
+        for kword in keywords:
+            match = next((col for col in df.columns if kword.lower() in col.lower() and col not in used_cols), None)
+
+            if match:
+                df[col_name] = df[match]
+                used_cols.add(match)
+                if "Año" in col_name:
+                    df[col_name] = df[col_name].apply(lambda x: year_only(x))
+                break
+
+        if col_name not in df.columns:
+            df[col_name] = "N/A"
+
+    return df
+
+def total_products_to_excel(DB, dfg, DIR='InstituLAC'):
+    try:
+        boletin_df = pd.read_excel('Institulac/Boletin.xlsx', sheet_name="INFORMACIÓN DE CARACTERIZACIÓN")
+        prods = []
+
+        cols = ['Nombre Grupo', 'Código Grupo', 'Facultad', 'Nombre Producto', 'Tipología', 'Tipo Producto', 'Categoría',
+                'Año Inicio', 'Año Fin', 'Última Actualización']
+
+        for idx, DBG in enumerate(DB):
+            group_name = dfg.iloc[idx]['Nombre del grupo']
+            group_code = dfg.iloc[idx]['COL Grupo']
+            group_leader = dfg.iloc[idx]['Nombre del líder']
+            group_faculty = boletin_df.loc[boletin_df["CÓDIGO GRUPO DE INVESTIGACIÓN"] == group_code, "FACULTAD"].values[0]
+
+            for cat_name, cat_dict in DBG.items():
+                if cat_name in ['Info_Group', 'Members'] or type(cat_dict) is not dict:
+                    continue
+
+                for subcat_name, prods_df in cat_dict.items():
+
+                    prods_df['Código Grupo'] = group_code
+                    prods_df['Nombre Grupo'] = group_name
+                    prods_df['Facultad'] = group_faculty
+                    prods_df['Nombre de Líder'] = group_leader
+                    prods_df['Tipología'] = cat_name
+                    prods_df['Tipo Producto'] = subcat_name
+
+                    prods_df = unify_columns(prods_df)
+                    prods_df = prods_df[cols]
+
+                    prods.append(prods_df)
+
+        print(f"Size of total list: {len(prods)}")
+        # Concatenates the DataFrames of every product
+        total_df = pd.concat(prods, ignore_index=True)
+
+        with pd.ExcelWriter('InstituLAC/Total_Productos.xlsx') as writer:
+            total_df.reset_index(drop=False, names='No.')
+            total_df.to_excel(writer, sheet_name="Listado total productos")
+
+                
+    except Exception as e:
+        print(f'Error Processing total list of products: {e}')
 
 def clean_sheet_name(name):
     if not name:

@@ -1,0 +1,6 @@
+cryptography
+pandas
+helium
+selenium
+ipython
+openpyxl
